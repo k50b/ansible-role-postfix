@@ -6,4 +6,4 @@ postfix_cert_path: /etc/ssl/certs/ssl-cert-snakeoil.pem
 postfix_privkey_path: /etc/ssl/private/ssl-cert-snakeoil.key
 postfix_opendkim_genkey_selector: default
 postfix_vmail_root_dir: /home/vmail
-postfix_relay_maps: [] # {domain, mx, login, password}
+postfix_relay_maps: []  # {domain, mx, login, password}
