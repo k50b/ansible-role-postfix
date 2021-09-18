@@ -1,0 +1,17 @@
+#Mode               sv
+#SubDomains         no
+AutoRestart         yes
+AutoRestartRate     10/1h
+Canonicalization    relaxed
+Domain              *
+KeyFile             /etc/dkimkeys/{{ postfix_opendkim_genkey_selector }}.private
+LogWhy              yes
+OversignHeaders     From
+PidFile             /run/opendkim/opendkim.pid
+Selector            {{ postfix_opendkim_genkey_selector }}
+Socket              inet:8892@localhost
+Syslog              yes
+SyslogSuccess       yes
+TrustAnchorFile     /usr/share/dns/root.key
+UMask               007
+UserID              opendkim

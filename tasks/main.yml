@@ -1,0 +1,159 @@
+---
+- name: Install Postfix and related software
+  apt:
+    name:
+      - postfix
+      - postfix-pcre
+      - opendkim
+      - opendkim-tools
+- name: Create postfix cert dir
+  file:
+    state: directory
+    path: /etc/postfix/ssl
+  notify: Reload postfix
+- name: Create cert symlinks
+  file:
+    state: link
+    dest: /etc/postfix/ssl/{{ item.dest }}
+    src: '{{ item.src }}'
+    force: true
+  loop:
+    - {dest: cert.pem, src: '{{ postfix_cert_path }}'}
+    - {dest: privkey.pem, src: '{{ postfix_privkey_path }}'}
+  notify: Reload postfix
+- name: Create system group for mailbox user
+  group:
+    name: vmail
+    gid: 5000
+- name: Create system user to use with virtual mailboxes
+  user:
+    name: vmail
+    password: '*'
+    shell: /bin/false
+    create_home: false
+    uid: 5000
+    group: vmail
+    home: '{{ postfix_vmail_root_dir }}'
+  notify: Reload postfix
+- name: Create root directory for virtual mailboxes
+  file:
+    path: '{{ postfix_vmail_root_dir }}'
+    state: directory
+    owner: vmail
+    group: vmail
+    mode: "0750"
+- name: Create directory for each of virtual mailbox domains
+  file:
+    path: '{{ (postfix_vmail_root_dir, item) | path_join }}'
+    state: directory
+    owner: vmail
+    group: vmail
+    mode: "0750"
+  loop: '{{ postfix_virtual_domains }}'
+- name: smtp_sasl_passwd file setup
+  block:
+    - name: Generate smtp_sasl_passwd file
+      copy:
+        dest: /etc/postfix/smtp_sasl_passwd
+        content: |
+          {% for m in postfix_relay_maps %}
+          {{ m.mx }} {{ m.login }}:{{ m.password }}
+          {% endfor %}
+        mode: "0600"
+      notify: Reload postfix
+    - name: Stat smtp_sasl_passwd file
+      stat:
+        path: /etc/postfix/smtp_sasl_passwd
+      register: s1
+    - name: Stat smtp_sasl_passwd.db file
+      stat:
+        path: /etc/postfix/smtp_sasl_passwd.db
+      register: s2
+    - name: Process smtp_sasl_passwd file with postmap
+      command:
+        cmd: postmap /etc/postfix/smtp_sasl_passwd
+      when: 'not s2.stat.exists or s1.stat.mtime > s2.stat.mtime'
+    - name: Generate relaymap file
+      copy:
+        dest: /etc/postfix/relaymap
+        content: |
+          {% for m in postfix_relay_maps %}
+          @{{ m.domain }} {{ m.mx }}
+          {% endfor %}
+      notify: Reload postfix
+    - name: Stat relaymap file
+      stat:
+        path: /etc/postfix/relaymap
+      register: s1
+    - name: Stat relaymap.db file
+      stat:
+        path: /etc/postfix/relaymap.db
+      register: s2
+    - name: Process relaymap file with postmap
+      command:
+        cmd: postmap /etc/postfix/relaymap
+      when: 'not s2.stat.exists or s1.stat.mtime > s2.stat.mtime'
+  when: postfix_relay_maps is defined and (postfix_relay_maps | length > 0)
+- name: Ensure vmail index files exist
+  file:
+    path: '{{ item }}'
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+  loop: "{{ postfix_vmail_index_files }}"
+  notify: Reload postfix
+- name: Ensure smtp header checks exist
+  # Header checks are used to parse and rewrite outgoing mail.
+  # Can be used to improve privacy by stripping "Received:"
+  # headers which include a client IP address.
+  # Example config:
+  #   /^Received: .*with ESMTPSA/ IGNORE
+  #   /^X-Originating-IP:/ IGNORE
+  #   /^X-Mailer:/ IGNORE
+  #   /^Mime-Version:/ IGNORE
+  file:
+    path: '{{ postfix_smtp_header_checks_file }}'
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+  notify: Reload postfix
+- name: Stat vmail index files
+  stat:
+    path: '{{ item }}'
+  register: s1
+  loop: '{{ postfix_vmail_index_files }}'
+- name: Stat postmap-generated vmail index files
+  stat:
+    path: '{{ item }}'
+  register: s2
+  loop: >
+    {{
+      postfix_vmail_index_files |
+      map("regex_replace", "^(.*)$", ''\1.db'')
+    }}
+- name: Run postmap on index files if they have been modified
+  command:
+    cmd: postmap {{ item[0].stat.path }}
+  loop: "{{ s1.results | zip(s2.results) }}"
+  when: 'not item[1].stat.exists or item[0].stat.mtime > item[1].stat.mtime'
+- name: Prepare postfix's main.cf
+  template:
+    dest: /etc/postfix/main.cf
+    src: main.cf.j2
+    backup: true
+  notify: Reload postfix
+- name: Prepare opendkim configuration
+  template:
+    src: opendkim.conf.j2
+    dest: /etc/opendkim.conf
+    backup: true
+  notify: Restart opendkim
+- name: Generate opendkim signing key
+  shell:
+    cmd: >
+      opendkim-genkey -s "{{ postfix_opendkim_genkey_selector }}" &&
+      chown opendkim:opendkim "{{ postfix_opendkim_genkey_selector }}.private" &&
+      chmod 600 "{{ postfix_opendkim_genkey_selector }}.private"
+    chdir: /etc/dkimkeys
+    creates: /etc/dkimkeys/{{ postfix_opendkim_genkey_selector }}.private
+  notify: Restart opendkim

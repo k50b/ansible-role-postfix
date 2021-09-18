@@ -1,0 +1,13 @@
+galaxy_info:
+  role_name: postfix
+  author: mr_class
+  description: Customized postfix intallation.
+
+  license: MIT
+
+  min_ansible_version: 2.1
+
+  galaxy_tags:
+    - postfix
+
+dependencies: []
