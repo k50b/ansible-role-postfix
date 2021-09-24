@@ -1,5 +1,2 @@
 ---
-postfix_vmail_index_files:
-  - /etc/postfix/virtual
-  - /etc/postfix/vmailbox
 postfix_smtp_header_checks_file: /etc/postfix/smtp_header_checks_file
