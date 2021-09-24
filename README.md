@@ -37,6 +37,10 @@ postfix_opendkim_genkey_selector: default
 postfix_vmail_root_dir: /home/vmail
 
 postfix_relay_maps: [] # {domain, mx, login, password}
+
+postfix_vmail_mailboxes: []  # {recipient, path}
+
+postfix_virtual_aliases: []  # {alias, recipient}
 ```
 
 Example Playbook
