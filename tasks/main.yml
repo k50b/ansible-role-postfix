@@ -105,7 +105,7 @@
   register: vmailbox_result
 - name: Run postmap on virtual mailboxes configuration file
   command:
-    cmd: postmap {{ vmailbox_result.copy.dest }}
+    cmd: postmap {{ vmailbox_result.dest }}
   when: vmailbox_result.changed
 - name: Configure virtual aliases
   copy:
@@ -118,7 +118,7 @@
   register: virtual_alias_result
 - name: Run postmap on virtual aliases configuration file
   command:
-    cmd: postmap {{ virtual_alias_result.copy.dest }}
+    cmd: postmap {{ virtual_alias_result.dest }}
   when: virtual_alias_result.changed
 - name: Configure smtp header checks file
   copy:
